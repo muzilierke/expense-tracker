@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图标生成器</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #0f0f0f;
+    color: #e0e0e0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+  }
+  h1 { font-size: 20px; margin-bottom: 8px; }
+  p { color: #888; font-size: 14px; margin-bottom: 24px; text-align: center; }
+  .previews { display: flex; gap: 24px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
+  .preview-item { text-align: center; }
+  .preview-item canvas { border-radius: 24px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .preview-item .label { font-size: 13px; color: #888; margin-top: 8px; }
+  button {
+    padding: 12px 32px;
+    font-size: 15px;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    background: #6c8cff;
+    color: #fff;
+    margin: 6px;
+    font-family: inherit;
+  }
+  button:hover { opacity: 0.88; }
+  button:active { transform: scale(0.98); }
+  .done { color: #4ade80; font-size: 14px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+<h1>🪙 生成 App 图标</h1>
+<p>点击下载按钮，将两个 PNG 文件保存到 expense-tracker 文件夹</p>
+
+<div class="previews">
+  <div class="preview-item">
+    <canvas id="preview-192" width="192" height="192"></canvas>
+    <div class="label">icon-192.png</div>
+  </div>
+  <div class="preview-item">
+    <canvas id="preview-512" width="512" height="512"></canvas>
+    <div class="label">icon-512.png</div>
+  </div>
+</div>
+
+<div>
+  <button onclick="downloadIcon(192)">⬇️ 下载 icon-192.png</button>
+  <button onclick="downloadIcon(512)">⬇️ 下载 icon-512.png</button>
+</div>
+<p class="done" id="msg"></p>
+
+<script>
+function drawIcon(canvas) {
+  const ctx = canvas.getContext('2d');
+  const s = canvas.width;
+
+  // Background: dark rounded rect
+  ctx.fillStyle = '#0f0f0f';
+  ctx.beginPath();
+  ctx.roundRect(0, 0, s, s, s * 0.22);
+  ctx.fill();
+
+  // Coin circle
+  const cx = s * 0.5;
+  const cy = s * 0.44;
+  const r = s * 0.26;
+
+  // Outer glow
+  const glow = ctx.createRadialGradient(cx, cy, r * 0.7, cx, cy, r * 1.15);
+  glow.addColorStop(0, 'rgba(108,140,255,0.3)');
+  glow.addColorStop(1, 'rgba(108,140,255,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 1.15, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Main coin
+  const coin = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+  coin.addColorStop(0, '#facc15');
+  coin.addColorStop(0.5, '#f59e0b');
+  coin.addColorStop(1, '#d97706');
+  ctx.fillStyle = coin;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Coin border
+  ctx.strokeStyle = '#b45309';
+  ctx.lineWidth = s * 0.025;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // ¥ symbol
+  ctx.fillStyle = '#7c2d12';
+  ctx.font = `bold ${s * 0.28}px -apple-system, "PingFang SC", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('¥', cx, cy + s * 0.01);
+}
+
+// Draw previews
+drawIcon(document.getElementById('preview-192'));
+drawIcon(document.getElementById('preview-512'));
+
+function downloadIcon(size) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  drawIcon(canvas);
+
+  canvas.toBlob(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `icon-${size}.png`;
+    a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById('msg').textContent = `✅ icon-${size}.png 已下载！请放到 expense-tracker 文件夹里`;
+  });
+}
+</script>
+
+</body>
+</html>
