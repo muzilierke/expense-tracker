@@ -1,5 +1,5 @@
 // Service Worker for 个人记账 PWA
-const CACHE_NAME = 'expense-tracker-v2';
+const CACHE_NAME = 'expense-tracker-v3';
 const ASSETS = [
   './',
   './index.html',

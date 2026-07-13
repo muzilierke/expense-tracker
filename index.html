@@ -278,6 +278,30 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .btn-del:hover { background: #3a1015; border-color: #5a2025; color: #f87171; }
 
+/* Action buttons */
+.action-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.btn-action {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.btn-action:hover { border-color: var(--accent); color: var(--accent); }
+.btn-action:active { transform: scale(0.98); }
+
 .empty-state {
   text-align: center;
   padding: 48px 20px;
@@ -463,6 +487,11 @@ textarea { resize: vertical; min-height: 60px; }
       <div id="records-empty" class="empty-state">
         <div class="icon">📭</div>
         <p>还没有记录，去记一笔吧</p>
+      </div>
+      <div class="action-row">
+        <button class="btn-action" id="btn-export">📤 导出数据</button>
+        <button class="btn-action" id="btn-import">📥 导入数据</button>
+        <input type="file" id="import-file" accept=".json" style="display:none">
       </div>
     </div>
   </div>
@@ -1059,6 +1088,61 @@ document.querySelectorAll('#records-filter-row .filter-chip').forEach(chip => {
     this.classList.add('active');
     refreshRecords();
   });
+});
+
+// ==================== 导入导出 ====================
+document.getElementById('btn-export').addEventListener('click', () => {
+  const data = loadData();
+  if (data.length === 0) {
+    showToast('📭 没有数据可导出');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `记账备份_${new Date().toISOString().substring(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✅ 已导出 ' + data.length + ' 条记录');
+});
+
+document.getElementById('btn-import').addEventListener('click', () => {
+  document.getElementById('import-file').click();
+});
+
+document.getElementById('import-file').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!Array.isArray(imported)) throw new Error('格式错误');
+
+      const existing = loadData();
+      const existingIds = new Set(existing.map(r => r.id));
+
+      let added = 0;
+      imported.forEach(r => {
+        if (!r.id || !r.date || !r.amount || !r.category) return;
+        if (existingIds.has(r.id)) return;
+        existing.push(r);
+        existingIds.add(r.id);
+        added++;
+      });
+
+      saveData(existing);
+      showToast('✅ 导入了 ' + added + ' 条新记录');
+      refreshRecords();
+      refreshDashboard();
+    } catch (err) {
+      showToast('⚠️ 文件格式不正确');
+    }
+  };
+  reader.readAsText(file);
+  this.value = '';
 });
 
 // ==================== 初始加载 ====================
