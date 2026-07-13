@@ -395,6 +395,8 @@ textarea { resize: vertical; min-height: 60px; }
             <option value="工作">💼 工作</option>
             <option value="学习">📚 学习</option>
             <option value="日常开销">🛒 日常开销</option>
+            <option value="服饰">👗 服饰</option>
+            <option value="护肤">🧴 护肤</option>
           </select>
         </div>
         <div class="form-group">
@@ -424,9 +426,11 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="card">
       <div class="card-header">📈 支出趋势</div>
       <div class="filter-row">
-        <button class="filter-chip active" data-range="3m">近3个月</button>
-        <button class="filter-chip" data-range="6m">近6个月</button>
-        <button class="filter-chip" data-range="12m">近12个月</button>
+        <button class="filter-chip" data-range="this-week">本周</button>
+        <button class="filter-chip" data-range="this-month">本月</button>
+        <button class="filter-chip active" data-range="3m">近3月</button>
+        <button class="filter-chip" data-range="6m">近6月</button>
+        <button class="filter-chip" data-range="12m">近12月</button>
       </div>
       <div class="chart-wrap"><canvas id="trend-chart"></canvas></div>
     </div>
@@ -434,6 +438,7 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="card">
       <div class="card-header">🍩 分类占比</div>
       <div class="filter-row" id="pie-filter-row">
+        <button class="filter-chip" data-range="this-week">本周</button>
         <button class="filter-chip active" data-range="this-month">本月</button>
         <button class="filter-chip" data-range="last-month">上月</button>
         <button class="filter-chip" data-range="3m">近3月</button>
@@ -501,16 +506,18 @@ if ('serviceWorker' in navigator) {
 
 // ==================== 数据层 ====================
 const STORAGE_KEY = 'expense_tracker_data';
-const CATEGORIES = ['餐饮', '交通', '娱乐', '房租', '人情', '工作', '学习', '日常开销'];
+const CATEGORIES = ['餐饮', '交通', '娱乐', '房租', '人情', '工作', '学习', '日常开销', '服饰', '护肤'];
 
 const CAT_ICONS = {
   '餐饮': '🍜', '交通': '🚇', '娱乐': '🎮', '房租': '🏠',
-  '人情': '🎁', '工作': '💼', '学习': '📚', '日常开销': '🛒'
+  '人情': '🎁', '工作': '💼', '学习': '📚', '日常开销': '🛒',
+  '服饰': '👗', '护肤': '🧴'
 };
 
 const CAT_COLORS = {
   '餐饮': '#f87171', '交通': '#60a5fa', '娱乐': '#facc15', '房租': '#c084fc',
-  '人情': '#fb923c', '工作': '#4ade80', '学习': '#2dd4bf', '日常开销': '#a78bfa'
+  '人情': '#fb923c', '工作': '#4ade80', '学习': '#2dd4bf', '日常开销': '#a78bfa',
+  '服饰': '#f472b6', '护肤': '#34d399'
 };
 
 function loadData() {
@@ -548,6 +555,28 @@ function filterByRange(records, range) {
   const now = new Date();
   const today = now.toISOString().substring(0, 10);
   let start;
+
+  if (range === 'this-week') {
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    start = monday.toISOString().substring(0, 10);
+    return records.filter(r => r.date >= start && r.date <= today);
+  }
+  if (range === 'last-week') {
+    const dayOfWeek = now.getDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const thisMonday = new Date(now);
+    thisMonday.setDate(now.getDate() + mondayOffset);
+    const lastMonday = new Date(thisMonday);
+    lastMonday.setDate(thisMonday.getDate() - 7);
+    const lastSunday = new Date(thisMonday);
+    lastSunday.setDate(thisMonday.getDate() - 1);
+    start = lastMonday.toISOString().substring(0, 10);
+    const end = lastSunday.toISOString().substring(0, 10);
+    return records.filter(r => r.date >= start && r.date <= end);
+  }
 
   if (range === 'this-month') {
     start = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
@@ -594,6 +623,14 @@ function groupByMonth(records) {
   records.forEach(r => {
     const mk = getMonthKey(r.date);
     map[mk] = (map[mk] || 0) + r.amount;
+  });
+  return map;
+}
+
+function groupByDay(records) {
+  const map = {};
+  records.forEach(r => {
+    map[r.date] = (map[r.date] || 0) + r.amount;
   });
   return map;
 }
@@ -699,8 +736,141 @@ function refreshDashboard() {
 function drawTrendChart(allData) {
   const range = document.querySelector('#panel-dashboard .filter-chip.active[data-range]')?.dataset?.range || '3m';
   const filtered = filterByRange(allData, range);
-  const monthMap = groupByMonth(filtered);
 
+  const ctx = document.getElementById('trend-chart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+
+  let labels, values, barLabel;
+
+  if (range === 'this-week' || range === 'last-week') {
+    // Daily bars for week view
+    const dayMap = groupByDay(filtered);
+    const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+    // Figure out the Monday of the target week
+    let weekStart;
+    if (range === 'this-week') {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      weekStart = new Date(now);
+      weekStart.setDate(now.getDate() + mondayOffset);
+    } else {
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const thisMonday = new Date(now);
+      thisMonday.setDate(now.getDate() + mondayOffset);
+      weekStart = new Date(thisMonday);
+      weekStart.setDate(thisMonday.getDate() - 7);
+    }
+
+    labels = weekDays.map((_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return weekDays[i] + '\n' + (d.getMonth()+1) + '/' + d.getDate();
+    });
+    values = weekDays.map((_, i) => {
+      const d = new Date(weekStart);
+      d.setDate(weekStart.getDate() + i);
+      return dayMap[d.toISOString().substring(0, 10)] || 0;
+    });
+    barLabel = '单日支出';
+
+    trendChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: barLabel,
+          data: values,
+          backgroundColor: 'rgba(108,140,255,0.7)',
+          borderColor: '#6c8cff',
+          borderWidth: 1,
+          borderRadius: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2.2,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => formatMoney(ctx.raw) } }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#888', font: { size: 11 } },
+            grid: { display: false },
+            border: { color: '#2a2a2a' }
+          },
+          y: {
+            ticks: { color: '#888', font: { size: 12 }, callback: v => '¥' + v },
+            grid: { color: '#1e1e1e' },
+            border: { color: '#2a2a2a' },
+            beginAtZero: true
+          }
+        }
+      }
+    });
+    return;
+  }
+
+  if (range === 'this-month') {
+    // Daily bars for month view
+    const dayMap = groupByDay(filtered);
+    const now = new Date();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+    labels = [];
+    values = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      labels.push(d + '日');
+      values.push(dayMap[dateStr] || 0);
+    }
+
+    trendChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: '单日支出',
+          data: values,
+          backgroundColor: 'rgba(108,140,255,0.7)',
+          borderColor: '#6c8cff',
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        aspectRatio: 2.2,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => formatMoney(ctx.raw) } }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#888', font: { size: 11 } },
+            grid: { display: false },
+            border: { color: '#2a2a2a' }
+          },
+          y: {
+            ticks: { color: '#888', font: { size: 12 }, callback: v => '¥' + v },
+            grid: { color: '#1e1e1e' },
+            border: { color: '#2a2a2a' },
+            beginAtZero: true
+          }
+        }
+      }
+    });
+    return;
+  }
+
+  // Monthly bars for 3m/6m/12m
+  const monthMap = groupByMonth(filtered);
   const now = new Date();
   const months = [];
   let count;
@@ -714,9 +884,6 @@ function drawTrendChart(allData) {
     const label = `${d.getMonth()+1}月`;
     months.push({ key, label, amount: monthMap[key] || 0 });
   }
-
-  const ctx = document.getElementById('trend-chart').getContext('2d');
-  if (trendChart) trendChart.destroy();
 
   trendChart = new Chart(ctx, {
     type: 'bar',
