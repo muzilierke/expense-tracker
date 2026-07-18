@@ -302,6 +302,120 @@ textarea { resize: vertical; min-height: 60px; }
 .btn-action:hover { border-color: var(--accent); color: var(--accent); }
 .btn-action:active { transform: scale(0.98); }
 
+/* Voice button */
+.voice-area { text-align: center; margin-bottom: 16px; }
+.btn-voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px dashed var(--border);
+  border-radius: 24px;
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.btn-voice:hover { border-color: var(--accent); color: var(--accent); }
+.btn-voice.recording {
+  border-color: #f87171;
+  border-style: solid;
+  color: #f87171;
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0.3); }
+  50% { box-shadow: 0 0 0 12px rgba(248,113,113,0); }
+}
+
+/* Voice overlay */
+.voice-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 1000;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+.voice-overlay.show { display: flex; }
+.voice-overlay .voice-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+.voice-overlay .voice-text {
+  font-size: 18px;
+  color: #fff;
+  text-align: center;
+  line-height: 1.6;
+  max-width: 300px;
+  min-height: 50px;
+}
+.voice-overlay .voice-hint {
+  font-size: 13px;
+  color: var(--text2);
+  margin-top: 24px;
+}
+.voice-overlay .voice-close {
+  margin-top: 32px;
+  padding: 12px 40px;
+  font-size: 15px;
+  font-weight: 600;
+  border: 1px solid #555;
+  border-radius: 24px;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.voice-overlay .voice-close:hover { border-color: #fff; color: #fff; }
+
+/* Voice parsed result */
+.voice-result {
+  display: none;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text2);
+}
+.voice-result.show { display: block; }
+.voice-result .vr-row { margin-bottom: 4px; }
+.voice-result .vr-row:last-child { margin-bottom: 0; }
+.voice-result strong { color: var(--text); }
+.voice-result .vr-confirm {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+.voice-result .vr-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.vr-btn-accept {
+  background: var(--accent);
+  color: #fff;
+}
+.vr-btn-dismiss {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text2);
+}
+
 .empty-state {
   text-align: center;
   padding: 48px 20px;
@@ -396,6 +510,18 @@ textarea { resize: vertical; min-height: 60px; }
   <div class="panel active" id="panel-add">
     <div class="card">
       <div class="card-header">📝 记一笔</div>
+      <div class="voice-area">
+        <button type="button" class="btn-voice" id="btn-voice">🎤 语音输入</button>
+        <div class="voice-result" id="voice-result">
+          <div class="vr-row">💵 金额: <strong id="vr-amount">-</strong></div>
+          <div class="vr-row">🏷️ 分类: <strong id="vr-cat">-</strong></div>
+          <div class="vr-row">📝 备注: <strong id="vr-note">-</strong></div>
+          <div class="vr-confirm">
+            <button class="vr-btn vr-btn-accept" id="vr-accept">✅ 填入表单</button>
+            <button class="vr-btn vr-btn-dismiss" id="vr-dismiss">✕ 忽略</button>
+          </div>
+        </div>
+      </div>
       <form id="expense-form">
         <div class="row">
           <div class="form-group">
@@ -450,9 +576,9 @@ textarea { resize: vertical; min-height: 60px; }
     <div class="card">
       <div class="card-header">📈 支出趋势</div>
       <div class="filter-row">
-        <button class="filter-chip" data-range="this-week">本周</button>
+        <button class="filter-chip active" data-range="this-week">本周</button>
         <button class="filter-chip" data-range="this-month">本月</button>
-        <button class="filter-chip active" data-range="3m">近3月</button>
+        <button class="filter-chip" data-range="3m">近3月</button>
         <button class="filter-chip" data-range="6m">近6月</button>
         <button class="filter-chip" data-range="12m">近12月</button>
       </div>
@@ -495,6 +621,14 @@ textarea { resize: vertical; min-height: 60px; }
       </div>
     </div>
   </div>
+</div>
+
+<!-- Voice recording overlay -->
+<div class="voice-overlay" id="voice-overlay">
+  <div class="voice-icon">🎙️</div>
+  <div class="voice-text" id="voice-text">正在聆听...</div>
+  <div class="voice-hint">说出你的消费，例如：<br>"今天中午吃饭花了50块"</div>
+  <button class="voice-close" id="voice-close">停止录音</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -545,7 +679,7 @@ const CAT_ICONS = {
 
 const CAT_COLORS = {
   '餐饮': '#f87171', '交通': '#60a5fa', '娱乐': '#facc15', '房租': '#c084fc',
-  '人情': '#fb923c', '工作': '#4ade80', '学习': '#2dd4bf', '日常开销': '#a78bfa',
+  '人情': '#fb923c', '工作': '#4ade80', '学习': '#2dd4bf', '日常开销': '#e8795e',
   '服饰': '#f472b6', '护肤': '#34d399'
 };
 
@@ -721,6 +855,208 @@ document.getElementById('expense-form').addEventListener('submit', function(e) {
   document.getElementById('input-category').value = '';
   document.getElementById('input-note').value = '';
   document.getElementById('input-date').value = new Date().toISOString().substring(0, 10);
+});
+
+// ==================== 语音输入 ====================
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null;
+let voiceParsed = null; // store parsed result temporarily
+
+const CAT_KEYWORDS = {
+  '餐饮': ['吃', '饭', '餐', '外卖', '食堂', '餐厅', '面', '粉', '火锅', '烧烤', '早饭', '午饭', '晚饭', '早餐', '午餐', '晚餐', '中午饭', '早茶', '下午茶', '宵夜', '夜宵', '小吃', '零食', '饮料', '奶茶', '咖啡'],
+  '交通': ['车', '地铁', '公交', '打车', '出行', '火车', '飞机', '高铁', '动车', '客车', '大巴', '骑车', '骑行', '停车', '加油', '充电', '高速', '过路费'],
+  '娱乐': ['玩', '游戏', '电影', '唱歌', '旅游', '门票', '演出', '音乐', '演唱会', '酒吧', '乐园', '景区', '桌游', '剧本杀', '密室', '健身', '运动'],
+  '房租': ['房租', '租金', '物业', '水电', '燃气', '取暖', '宽带', '网费'],
+  '人情': ['礼物', '红包', '结婚', '生日', '请客', '聚会', '婚宴', '满月', '送礼', '人情'],
+  '工作': ['办公', '打印', '快递', '会议', '出差', '办公用品', '报销', '通勤', '打车费'],
+  '学习': ['书', '课程', '培训', '考试', '资料', '学费', '网课', '文具', '报名'],
+  '日常开销': ['日用品', '超市', '杂货', '纸巾', '洗漱', '牙膏', '牙刷', '洗发', '沐浴', '洗衣', '垃圾袋', '日用', '买菜', '水果', '蔬菜', '零食', '饮料', '矿泉水', '纯净水'],
+  '服饰': ['衣服', '鞋', '包', '裤子', '裙子', '帽子', 'T恤', '衬衫', '外套', '羽绒', '夹克', '裤', '袜', '内衣', '饰品', '手表', '首饰', '眼镜', '太阳镜'],
+  '护肤': ['化妆', '护肤', '面膜', '洗面奶', '防晒', '口红', '粉底', '精华', '乳液', '面霜', '眼霜', '隔离', '卸妆', '唇膏']
+};
+
+function parseVoiceText(text) {
+  let amount = null;
+  let category = null;
+  let note = '';
+  let dateOffset = 0; // 0=today, -1=yesterday, etc.
+
+  // Extract amount: number followed by 元/块/块钱/¥/￥
+  const amountMatch = text.match(/(\d+\.?\d*)\s*[元块¥￥]/);
+  if (amountMatch) {
+    amount = parseFloat(amountMatch[1]);
+  }
+  // Also try "X块X" (without 钱 suffix)
+  if (!amount) {
+    const altMatch = text.match(/(\d+\.?\d*)\s*块/);
+    if (altMatch) amount = parseFloat(altMatch[1]);
+  }
+  // Bare number at the end: "吃饭50"
+  if (!amount) {
+    const bareMatch = text.match(/(\d+\.?\d*)\s*$/);
+    if (bareMatch && parseFloat(bareMatch[1]) > 0) {
+      amount = parseFloat(bareMatch[1]);
+    }
+  }
+
+  // Extract date
+  if (/今天/.test(text)) dateOffset = 0;
+  else if (/昨天/.test(text)) dateOffset = -1;
+  else if (/前天/.test(text)) dateOffset = -2;
+  else {
+    const dateMatch = text.match(/(\d{1,2})\s*月\s*(\d{1,2})\s*[日号]/);
+    if (dateMatch) {
+      const m = parseInt(dateMatch[1]);
+      const d = parseInt(dateMatch[2]);
+      const now = new Date();
+      const targetDate = new Date(now.getFullYear(), m - 1, d);
+      if (targetDate > now) {
+        targetDate.setFullYear(now.getFullYear() - 1);
+      }
+      dateOffset = Math.round((targetDate - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+    }
+  }
+
+  // Extract category by keyword matching
+  let bestScore = 0;
+  for (const [cat, keywords] of Object.entries(CAT_KEYWORDS)) {
+    let score = 0;
+    for (const kw of keywords) {
+      if (text.includes(kw)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      category = cat;
+    }
+  }
+
+  // Extract note: remove amount and date parts, use rest
+  note = text
+    .replace(/\d+\.?\d*\s*[元块¥￥]?\s*(块钱)?/g, '')
+    .replace(/今天|昨天|前天/g, '')
+    .replace(/\d{1,2}\s*月\s*\d{1,2}\s*[日号]/g, '')
+    .replace(/花了?|用了?|买了?|消费/g, '')
+    .trim();
+  if (!note) note = '';
+
+  return { amount, category, note, dateOffset };
+}
+
+function applyVoiceResult(parsed) {
+  if (parsed.amount) {
+    document.getElementById('input-amount').value = parsed.amount;
+  }
+  if (parsed.category) {
+    document.getElementById('input-category').value = parsed.category;
+  }
+  if (parsed.note) {
+    document.getElementById('input-note').value = parsed.note;
+  }
+  if (parsed.dateOffset !== undefined && parsed.dateOffset !== 0) {
+    const d = new Date();
+    d.setDate(d.getDate() + parsed.dateOffset);
+    document.getElementById('input-date').value = d.toISOString().substring(0, 10);
+  }
+
+  document.getElementById('voice-result').classList.remove('show');
+  voiceParsed = null;
+  showToast('✅ 已填入，确认后提交');
+}
+
+function showVoiceResult(parsed) {
+  voiceParsed = parsed;
+  const vrEl = document.getElementById('voice-result');
+  document.getElementById('vr-amount').textContent = parsed.amount ? formatMoney(parsed.amount) : '未识别';
+  document.getElementById('vr-cat').textContent = parsed.category ? CAT_ICONS[parsed.category] + ' ' + parsed.category : '未识别';
+  document.getElementById('vr-note').textContent = parsed.note || '无';
+  vrEl.classList.add('show');
+}
+
+document.getElementById('vr-accept').addEventListener('click', () => {
+  if (voiceParsed) applyVoiceResult(voiceParsed);
+});
+
+document.getElementById('vr-dismiss').addEventListener('click', () => {
+  document.getElementById('voice-result').classList.remove('show');
+  voiceParsed = null;
+});
+
+document.getElementById('btn-voice').addEventListener('click', () => {
+  if (!SpeechRecognition) {
+    showToast('⚠️ 当前浏览器不支持语音识别（请用 Chrome 或 Safari）');
+    return;
+  }
+
+  if (recognition) {
+    try { recognition.abort(); } catch(e) {}
+  }
+
+  recognition = new SpeechRecognition();
+  recognition.lang = 'zh-CN';
+  recognition.interimResults = true;
+  recognition.continuous = true;
+
+  const btnVoice = document.getElementById('btn-voice');
+  const overlay = document.getElementById('voice-overlay');
+  const voiceText = document.getElementById('voice-text');
+
+  btnVoice.classList.add('recording');
+  btnVoice.textContent = '🔴 录音中...';
+  overlay.classList.add('show');
+  voiceText.textContent = '正在聆听...';
+
+  let finalTranscript = '';
+
+  recognition.onresult = function(event) {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript;
+      } else {
+        interim += event.results[i][0].transcript;
+      }
+    }
+    const displayText = finalTranscript + interim;
+    voiceText.textContent = displayText || '正在聆听...';
+  };
+
+  recognition.onerror = function(event) {
+    if (event.error === 'no-speech') {
+      voiceText.textContent = '未检测到语音，请再说一遍';
+    } else if (event.error === 'aborted') {
+      // intentional stop
+    } else {
+      voiceText.textContent = '识别出错，请重试';
+    }
+  };
+
+  recognition.onend = function() {
+    btnVoice.classList.remove('recording');
+    btnVoice.textContent = '🎤 语音输入';
+    overlay.classList.remove('show');
+
+    if (finalTranscript.trim()) {
+      const parsed = parseVoiceText(finalTranscript.trim());
+      if (parsed.amount || parsed.category) {
+        showVoiceResult(parsed);
+      } else {
+        showToast('⚠️ 未能识别金额和分类，请手动填写');
+      }
+    }
+    recognition = null;
+  };
+
+  recognition.start();
+});
+
+document.getElementById('voice-close').addEventListener('click', () => {
+  if (recognition) {
+    recognition.abort();
+    recognition = null;
+  }
+  document.getElementById('btn-voice').classList.remove('recording');
+  document.getElementById('btn-voice').textContent = '🎤 语音输入';
+  document.getElementById('voice-overlay').classList.remove('show');
 });
 
 // ==================== 仪表盘面板 ====================
