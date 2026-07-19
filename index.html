@@ -981,9 +981,13 @@ document.getElementById('vr-dismiss').addEventListener('click', () => {
   voiceParsed = null;
 });
 
-document.getElementById('btn-voice').addEventListener('click', () => {
+document.getElementById('btn-voice').addEventListener('click', async () => {
   if (!SpeechRecognitionAPI) {
-    showToast('⚠️ 当前浏览器不支持语音识别（请用 Chrome 或 Safari）');
+    showToast('⚠️ 浏览器不支持语音，请用 Chrome 或 Safari');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showToast('⚠️ 当前环境不支持麦克风，请用 HTTPS 打开');
     return;
   }
 
@@ -992,11 +996,6 @@ document.getElementById('btn-voice').addEventListener('click', () => {
     recognition = null;
   }
 
-  recognition = new SpeechRecognitionAPI();
-  recognition.lang = 'zh-CN';
-  recognition.interimResults = true;
-  recognition.continuous = false;
-
   const btnVoice = document.getElementById('btn-voice');
   const overlay = document.getElementById('voice-overlay');
   const voiceText = document.getElementById('voice-text');
@@ -1004,10 +1003,25 @@ document.getElementById('btn-voice').addEventListener('click', () => {
   btnVoice.classList.add('recording');
   btnVoice.textContent = '🔴 录音中...';
   overlay.classList.add('show');
-  voiceText.textContent = '正在聆听...';
+  voiceText.textContent = '正在请求麦克风权限...';
+
+  // Create recognition early so voice-close can abort it even during the permission prompt
+  recognition = new SpeechRecognitionAPI();
+  recognition.lang = 'zh-CN';
+  recognition.interimResults = true;
+  recognition.continuous = false;
 
   let finalTranscript = '';
   let noSpeechTimer = null;
+
+  function resetTimer() {
+    clearTimeout(noSpeechTimer);
+    noSpeechTimer = setTimeout(() => {
+      if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+      }
+    }, 10000);
+  }
 
   function cleanupUI() {
     clearTimeout(noSpeechTimer);
@@ -1017,19 +1031,8 @@ document.getElementById('btn-voice').addEventListener('click', () => {
     recognition = null;
   }
 
-  // Timeout: auto-stop after 8s of no speech
-  function resetNoSpeechTimer() {
-    clearTimeout(noSpeechTimer);
-    noSpeechTimer = setTimeout(() => {
-      if (recognition) {
-        try { recognition.stop(); } catch(e) {}
-      }
-    }, 8000);
-  }
-  resetNoSpeechTimer();
-
   recognition.onresult = function(event) {
-    resetNoSpeechTimer();
+    resetTimer();
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
@@ -1038,24 +1041,28 @@ document.getElementById('btn-voice').addEventListener('click', () => {
         interim += event.results[i][0].transcript;
       }
     }
-    const displayText = finalTranscript + interim;
-    voiceText.textContent = displayText || '正在聆听...';
+    voiceText.textContent = (finalTranscript + interim) || '正在聆听...';
   };
 
   recognition.onerror = function(event) {
     clearTimeout(noSpeechTimer);
-    recognition = null; // prevent onend from clearing the error message
-    if (event.error === 'aborted') return;
-    voiceText.textContent = event.error === 'no-speech' ? '未检测到语音，请重试'
-      : event.error === 'not-allowed' ? '请到系统设置中允许麦克风权限'
-      : event.error === 'network' ? '语音识别需要网络连接，请检查网络'
+    if (event.error === 'aborted') { recognition = null; return; }
+    const msg = event.error === 'no-speech' ? '未检测到语音，请重试'
+      : event.error === 'not-allowed' ? '语音识别权限被拒，请检查系统设置'
+      : event.error === 'network' ? '语音识别需要网络连接'
       : '语音识别出错: ' + event.error;
-    setTimeout(cleanupUI, 2500);
+    voiceText.textContent = msg;
+    recognition = null;
+    setTimeout(() => {
+      btnVoice.classList.remove('recording');
+      btnVoice.textContent = '🎤 语音输入';
+      overlay.classList.remove('show');
+    }, 2000);
   };
 
   recognition.onend = function() {
     clearTimeout(noSpeechTimer);
-    if (!recognition) return; // error already handled
+    if (!recognition) return;
     cleanupUI();
     if (finalTranscript.trim()) {
       const parsed = parseVoiceText(finalTranscript.trim());
@@ -1068,30 +1075,32 @@ document.getElementById('btn-voice').addEventListener('click', () => {
     }
   };
 
-  // Request mic permission first (critical for mobile), then start recognition
-  (async () => {
-    let micStream = null;
-    try {
-      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStream.getTracks().forEach(t => t.stop());
-      if (!recognition) return; // cancelled during permission prompt
-      recognition.start();
-    } catch(e) {
-      if (micStream) micStream.getTracks().forEach(t => t.stop());
-      if (!recognition) return; // cancelled
-      btnVoice.classList.remove('recording');
-      btnVoice.textContent = '🎤 语音输入';
-      overlay.classList.remove('show');
-      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-        showToast('⚠️ 请允许麦克风权限后重试');
-      } else if (e.message) {
-        showToast('⚠️ 语音启动失败: ' + e.message);
-      } else {
-        showToast('⚠️ 语音启动失败，请重试');
-      }
-      recognition = null;
+  // Step 1: explicitly request microphone permission (must be called directly from user gesture)
+  try {
+    const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micStream.getTracks().forEach(t => t.stop());
+  } catch(e) {
+    cleanupUI();
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      showToast('⚠️ 请在系统设置中允许麦克风权限');
+    } else if (e.name === 'NotFoundError') {
+      showToast('⚠️ 未检测到麦克风设备');
+    } else {
+      showToast('⚠️ 麦克风不可用: ' + (e.message || e.name));
     }
-  })();
+    return;
+  }
+
+  // Step 2: start speech recognition
+  voiceText.textContent = '正在聆听...';
+  resetTimer();
+
+  try {
+    recognition.start();
+  } catch(e) {
+    cleanupUI();
+    showToast('⚠️ 语音启动失败: ' + (e.message || e.name));
+  }
 });
 
 document.getElementById('voice-close').addEventListener('click', () => {
