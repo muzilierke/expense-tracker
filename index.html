@@ -989,12 +989,13 @@ document.getElementById('btn-voice').addEventListener('click', () => {
 
   if (recognition) {
     try { recognition.abort(); } catch(e) {}
+    recognition = null;
   }
 
   recognition = new SpeechRecognition();
   recognition.lang = 'zh-CN';
   recognition.interimResults = true;
-  recognition.continuous = true;
+  recognition.continuous = false;
 
   const btnVoice = document.getElementById('btn-voice');
   const overlay = document.getElementById('voice-overlay');
@@ -1006,8 +1007,21 @@ document.getElementById('btn-voice').addEventListener('click', () => {
   voiceText.textContent = '正在聆听...';
 
   let finalTranscript = '';
+  let noSpeechTimer = null;
+
+  // Timeout: auto-stop after 8s of no speech
+  function resetNoSpeechTimer() {
+    clearTimeout(noSpeechTimer);
+    noSpeechTimer = setTimeout(() => {
+      if (recognition) {
+        try { recognition.stop(); } catch(e) {}
+      }
+    }, 8000);
+  }
+  resetNoSpeechTimer();
 
   recognition.onresult = function(event) {
+    resetNoSpeechTimer();
     let interim = '';
     for (let i = event.resultIndex; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
@@ -1021,16 +1035,35 @@ document.getElementById('btn-voice').addEventListener('click', () => {
   };
 
   recognition.onerror = function(event) {
+    clearTimeout(noSpeechTimer);
     if (event.error === 'no-speech') {
-      voiceText.textContent = '未检测到语音，请再说一遍';
+      voiceText.textContent = '未检测到语音，请重试';
+      setTimeout(() => {
+        overlay.classList.remove('show');
+        btnVoice.classList.remove('recording');
+        btnVoice.textContent = '🎤 语音输入';
+      }, 1500);
     } else if (event.error === 'aborted') {
-      // intentional stop
+      // intentional stop, handled in onend
+    } else if (event.error === 'not-allowed') {
+      voiceText.textContent = '请允许麦克风权限后重试';
+      setTimeout(() => {
+        overlay.classList.remove('show');
+        btnVoice.classList.remove('recording');
+        btnVoice.textContent = '🎤 语音输入';
+      }, 2000);
     } else {
-      voiceText.textContent = '识别出错，请重试';
+      voiceText.textContent = '识别出错: ' + event.error;
+      setTimeout(() => {
+        overlay.classList.remove('show');
+        btnVoice.classList.remove('recording');
+        btnVoice.textContent = '🎤 语音输入';
+      }, 2000);
     }
   };
 
   recognition.onend = function() {
+    clearTimeout(noSpeechTimer);
     btnVoice.classList.remove('recording');
     btnVoice.textContent = '🎤 语音输入';
     overlay.classList.remove('show');
@@ -1046,12 +1079,20 @@ document.getElementById('btn-voice').addEventListener('click', () => {
     recognition = null;
   };
 
-  recognition.start();
+  try {
+    recognition.start();
+  } catch(e) {
+    btnVoice.classList.remove('recording');
+    btnVoice.textContent = '🎤 语音输入';
+    overlay.classList.remove('show');
+    showToast('⚠️ 语音启动失败，请重试');
+    recognition = null;
+  }
 });
 
 document.getElementById('voice-close').addEventListener('click', () => {
   if (recognition) {
-    recognition.abort();
+    try { recognition.stop(); } catch(e) {}
     recognition = null;
   }
   document.getElementById('btn-voice').classList.remove('recording');
