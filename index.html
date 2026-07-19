@@ -858,7 +858,7 @@ document.getElementById('expense-form').addEventListener('submit', function(e) {
 });
 
 // ==================== 语音输入 ====================
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognition = null;
 let voiceParsed = null; // store parsed result temporarily
 
@@ -982,7 +982,7 @@ document.getElementById('vr-dismiss').addEventListener('click', () => {
 });
 
 document.getElementById('btn-voice').addEventListener('click', () => {
-  if (!SpeechRecognition) {
+  if (!SpeechRecognitionAPI) {
     showToast('⚠️ 当前浏览器不支持语音识别（请用 Chrome 或 Safari）');
     return;
   }
@@ -992,7 +992,7 @@ document.getElementById('btn-voice').addEventListener('click', () => {
     recognition = null;
   }
 
-  recognition = new SpeechRecognition();
+  recognition = new SpeechRecognitionAPI();
   recognition.lang = 'zh-CN';
   recognition.interimResults = true;
   recognition.continuous = false;
@@ -1008,6 +1008,14 @@ document.getElementById('btn-voice').addEventListener('click', () => {
 
   let finalTranscript = '';
   let noSpeechTimer = null;
+
+  function cleanupUI() {
+    clearTimeout(noSpeechTimer);
+    btnVoice.classList.remove('recording');
+    btnVoice.textContent = '🎤 语音输入';
+    overlay.classList.remove('show');
+    recognition = null;
+  }
 
   // Timeout: auto-stop after 8s of no speech
   function resetNoSpeechTimer() {
@@ -1036,68 +1044,67 @@ document.getElementById('btn-voice').addEventListener('click', () => {
 
   recognition.onerror = function(event) {
     clearTimeout(noSpeechTimer);
-    if (event.error === 'no-speech') {
-      voiceText.textContent = '未检测到语音，请重试';
-      setTimeout(() => {
-        overlay.classList.remove('show');
-        btnVoice.classList.remove('recording');
-        btnVoice.textContent = '🎤 语音输入';
-      }, 1500);
-    } else if (event.error === 'aborted') {
-      // intentional stop, handled in onend
-    } else if (event.error === 'not-allowed') {
-      voiceText.textContent = '请允许麦克风权限后重试';
-      setTimeout(() => {
-        overlay.classList.remove('show');
-        btnVoice.classList.remove('recording');
-        btnVoice.textContent = '🎤 语音输入';
-      }, 2000);
-    } else {
-      voiceText.textContent = '识别出错: ' + event.error;
-      setTimeout(() => {
-        overlay.classList.remove('show');
-        btnVoice.classList.remove('recording');
-        btnVoice.textContent = '🎤 语音输入';
-      }, 2000);
-    }
+    recognition = null; // prevent onend from clearing the error message
+    if (event.error === 'aborted') return;
+    voiceText.textContent = event.error === 'no-speech' ? '未检测到语音，请重试'
+      : event.error === 'not-allowed' ? '请到系统设置中允许麦克风权限'
+      : event.error === 'network' ? '语音识别需要网络连接，请检查网络'
+      : '语音识别出错: ' + event.error;
+    setTimeout(cleanupUI, 2500);
   };
 
   recognition.onend = function() {
     clearTimeout(noSpeechTimer);
-    btnVoice.classList.remove('recording');
-    btnVoice.textContent = '🎤 语音输入';
-    overlay.classList.remove('show');
-
+    if (!recognition) return; // error already handled
+    cleanupUI();
     if (finalTranscript.trim()) {
       const parsed = parseVoiceText(finalTranscript.trim());
       if (parsed.amount || parsed.category) {
         showVoiceResult(parsed);
+        showToast('🎤 识别成功');
       } else {
         showToast('⚠️ 未能识别金额和分类，请手动填写');
       }
     }
-    recognition = null;
   };
 
-  try {
-    recognition.start();
-  } catch(e) {
-    btnVoice.classList.remove('recording');
-    btnVoice.textContent = '🎤 语音输入';
-    overlay.classList.remove('show');
-    showToast('⚠️ 语音启动失败，请重试');
-    recognition = null;
-  }
+  // Request mic permission first (critical for mobile), then start recognition
+  (async () => {
+    let micStream = null;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream.getTracks().forEach(t => t.stop());
+      if (!recognition) return; // cancelled during permission prompt
+      recognition.start();
+    } catch(e) {
+      if (micStream) micStream.getTracks().forEach(t => t.stop());
+      if (!recognition) return; // cancelled
+      btnVoice.classList.remove('recording');
+      btnVoice.textContent = '🎤 语音输入';
+      overlay.classList.remove('show');
+      if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+        showToast('⚠️ 请允许麦克风权限后重试');
+      } else if (e.message) {
+        showToast('⚠️ 语音启动失败: ' + e.message);
+      } else {
+        showToast('⚠️ 语音启动失败，请重试');
+      }
+      recognition = null;
+    }
+  })();
 });
 
 document.getElementById('voice-close').addEventListener('click', () => {
   if (recognition) {
-    try { recognition.stop(); } catch(e) {}
+    try { recognition.abort(); } catch(e) {}
     recognition = null;
   }
-  document.getElementById('btn-voice').classList.remove('recording');
-  document.getElementById('btn-voice').textContent = '🎤 语音输入';
-  document.getElementById('voice-overlay').classList.remove('show');
+  // cleanupUI will be called by onend, but also force cleanup in case onend doesn't fire
+  const btnVoice = document.getElementById('btn-voice');
+  const overlay = document.getElementById('voice-overlay');
+  btnVoice.classList.remove('recording');
+  btnVoice.textContent = '🎤 语音输入';
+  overlay.classList.remove('show');
 });
 
 // ==================== 仪表盘面板 ====================
